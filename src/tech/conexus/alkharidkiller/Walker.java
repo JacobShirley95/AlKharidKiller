@@ -2,13 +2,16 @@ package tech.conexus.alkharidkiller;
 
 import java.awt.Point;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 
+import org.powerbot.script.Condition;
 import org.powerbot.script.Filter;
 import org.powerbot.script.Tile;
 import org.powerbot.script.rt4.BasicQuery;
 import org.powerbot.script.rt4.ClientContext;
 import org.powerbot.script.rt4.GameObject;
+import org.powerbot.script.rt4.Path.TraversalOption;
 
 public class Walker {
 	private Tile destination;
@@ -71,11 +74,11 @@ public class Walker {
 		return new Graph(new Point(base.x(), base.y()), arr);
 	}
 	
-	public CustomPath getPath() {
+	public LocalDoorPath getPath() {
 		Graph g = getGraph(true);
 		//g.drawGraph(null);
 		
-		CustomPath cp = new CustomPath(ctx, g, destination, true);
+		LocalDoorPath cp = new LocalDoorPath(ctx, g, destination, true);
 		cp.addDoors(doorTypes);
 		
 		return cp;
@@ -85,8 +88,8 @@ public class Walker {
 		Graph g = getGraph(true);
 		//g.drawGraph(null);
 		
-		CustomPath cp = new CustomPath(ctx, g, destination, true);
+		LocalDoorPath cp = new LocalDoorPath(ctx, g, destination, true);
 		cp.addDoors(doorTypes);
-		cp.traverse();
+		while (cp.traverse()) { Condition.sleep(200); }
 	}
 }
