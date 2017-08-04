@@ -32,6 +32,9 @@ public class AlKharidKiller extends PollingScript<ClientContext> {
 
 	private DoorType[] doors = new DoorType[] { DoorType.AL_KHARID_PALACE_DOOR_LEFT,
 			DoorType.AL_KHARID_PALACE_DOOR_RIGHT };
+	
+	private static final int[] HERB_IDS = new int[] {203, 205, 207, 209, 211, 213, 215, 217, 219};
+	
 	private static final int WARRIOR_ID = 7323;
 	private static final int FOOD_ID = 333;
 	
@@ -54,7 +57,8 @@ public class AlKharidKiller extends PollingScript<ClientContext> {
 
 	@Override
 	public void start() {
-		walkToCombat();
+		Condition.sleep(1000);
+		ctx.camera.pitch(true);
 	}
 
 	@Override
@@ -76,6 +80,25 @@ public class AlKharidKiller extends PollingScript<ClientContext> {
 		}*/
 	}
 	
+	private void walkPath(LocalDoorPath path, int distanceToNextClick) {
+		while (!ctx.controller.isStopping() && path.traverse()) {
+			Condition.wait(new Callable<Boolean>() {
+				@Override
+				public Boolean call() throws Exception {
+					return ctx.movement.distance(ctx.movement.destination()) < distanceToNextClick;
+				}
+			});
+		}
+	}
+	
+	private void walkTo(Tile destination, List<DoorType> doors, int distanceToNextClick) {
+		walkPath(new LocalDoorPath(ctx, destination, doors, true), distanceToNextClick);
+	}
+	
+	private void walkTo(Tile destination, DoorType[] doors, int distanceToNextClick) {
+		walkPath(new LocalDoorPath(ctx, destination, doors, true), distanceToNextClick);
+	}
+	
 	private void attack() {
 		BasicQuery<Npc> enemies = ctx.npcs.select().id(WARRIOR_ID).nearest().limit(6).viewable();
 		if (Math.random() > 0.8) {
@@ -91,9 +114,9 @@ public class AlKharidKiller extends PollingScript<ClientContext> {
 			System.out.println("no warriors about, clicking on mm");
 			enemies = ctx.npcs.select().id(WARRIOR_ID);
 			
-			Walker walker = new Walker(ctx, enemies.peek().tile().derive(-2 + ((int)Math.random() * 4), -2 + ((int)Math.random() * 4)));
-			walker.addDoors(doors);
-			walker.start(0);
+			Tile target = enemies.peek().tile().derive(-2 + ((int)Math.random() * 4), -2 + ((int)Math.random() * 4));
+
+			walkTo(target, doors, 6);
 		} else {
 			Npc first = enemies.peek();
 	
@@ -184,16 +207,13 @@ public class AlKharidKiller extends PollingScript<ClientContext> {
 	}
 
 	private void walkToCombat() {
-		Walker walkToCombat = new Walker(ctx, WARRIOR_AREA.getRandomTile());
-		walkToCombat.addDoors(doors);
-		walkToCombat.start(0);
+		LocalDoorPath path = new LocalDoorPath(ctx, WARRIOR_AREA.getRandomTile(), doors, true);
+		walkPath(path, 6);
 	}
 
 	private void bank() {
 		if (ctx.inventory.select().count() >= 28) {
-			Walker walkToBank = new Walker(ctx, BANK_AREA.getRandomTile());
-			walkToBank.addDoors(doors);
-			walkToBank.start(0);
+			walkTo(BANK_AREA.getRandomTile(), doors, 6);
 
 			ctx.bank.open();
 			ctx.bank.depositInventory();
@@ -203,7 +223,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> {
 		}
 	}
 
-	private void pickup() {
+	private void loot() {
 		BasicQuery<GroundItem> items = ctx.groundItems.select().select(new Filter<GroundItem>() {
 			@Override
 			public boolean accept(GroundItem gI) {
@@ -226,7 +246,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> {
 								return ctx.inventory.select().id(herb.id()).size() > c;
 							}
 						}, 300)) {
-							System.out.println("DONE");
+							System.out.println("Picked up: " + herb.name());
 							Condition.sleep(500);
 							break;
 						}
@@ -237,21 +257,17 @@ public class AlKharidKiller extends PollingScript<ClientContext> {
 	}
 
 	private void handlePathToEntity(Tile tile, Interactive entity) {
-		Walker walker = new Walker(ctx, tile);
-		walker.addDoors(doors);
+		LocalDoorPath path = new LocalDoorPath(ctx, tile, doors, true);
 		
-		LocalDoorPath path = walker.getPath();
 		if (path.getDoorNodes().size() == 0)
 			return;
 
 		while (!ctx.controller.isStopping() && path.traverse()) {
-			if (Condition.wait(new Callable<Boolean>() {
-				@Override
-				public Boolean call() throws Exception {
-					return entity.inViewport() && tile.matrix(ctx).reachable();
-				}
-			}, 1000, 1))
+			if (entity.inViewport() && tile.matrix(ctx).reachable())
 				break;
+			else {
+				Condition.sleep(1000);
+			}
 		}
 	}
 

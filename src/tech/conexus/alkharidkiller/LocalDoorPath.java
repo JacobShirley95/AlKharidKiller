@@ -8,16 +8,17 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 import org.powerbot.script.Condition;
+import org.powerbot.script.Filter;
 import org.powerbot.script.Locatable;
 import org.powerbot.script.Tile;
 import org.powerbot.script.Viewable;
+import org.powerbot.script.rt4.BasicQuery;
 import org.powerbot.script.rt4.ClientContext;
 import org.powerbot.script.rt4.GameObject;
-import org.powerbot.script.rt4.Path;
 import org.powerbot.script.rt4.Path.TraversalOption;
 import org.powerbot.script.rt4.TilePath;
 
-public class LocalDoorPath {
+public class LocalDoorPath extends Path{
 	private List<Node> path;
 	private List<Node> doorNodes;
 	private List<Tile[]> pathSegments;
@@ -28,13 +29,81 @@ public class LocalDoorPath {
 	private TilePath curPath;
 	private int curPathIndex;
 
-	public LocalDoorPath(ClientContext ctx, Graph graph, Tile destination, boolean openDoors) {
-		this.graph = graph;
+	public LocalDoorPath(ClientContext ctx, Tile destination, boolean openDoors) {
+		this.graph = getGraph(openDoors);
 		this.ctx = ctx;
 		this.destination = destination;
 		this.doorNodes = new ArrayList<>();
 		
 		calculatePath(ctx, openDoors);
+	}
+	
+	public LocalDoorPath(ClientContext ctx, Tile destination, List<DoorType> doors, boolean openDoors) {
+		this(ctx, destination, openDoors);
+		
+		this.doors = doors;
+	}
+	
+	public LocalDoorPath(ClientContext ctx, Tile destination, DoorType[] doors, boolean openDoors) {
+		this(ctx, destination, openDoors);
+		
+		Collections.addAll(this.doors, doors);
+	}
+	
+	@Override
+	public Tile start() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	@Override
+	public Tile end() {
+		// TODO Auto-generated method stub
+		return null;
+	}
+	
+	private Graph getGraph(boolean handleDoors) {
+		Tile base = ctx.game.mapOffset();
+		
+		int[][] flags = ctx.client().getCollisionMaps()[ctx.game.floor()].getFlags();
+		
+		int[][] arr = new int[flags.length][flags[0].length];
+		
+		for (int x = 0; x < arr.length; x++) {
+			for (int y = 0; y < arr[x].length; y++) {
+				arr[x][y] = flags[x][y];
+			}
+		}
+		
+		if (handleDoors) {
+			int[] ids = new int[doors.size()];
+			for (int i = 0; i < doors.size(); i++) {
+				ids[i] = doors.get(i).id();
+			}
+			
+			BasicQuery<GameObject> objs = ctx.objects.select().id(ids);
+			objs.each(new Filter<GameObject>() {
+				@Override
+				public boolean accept(GameObject o) {
+					for (DoorType dT : doors) {
+						if (dT.id() == o.id()) {
+							Tile t = o.tile();
+							
+							arr[t.x() - base.x()][t.y() - base.y()] &= ~Graph.WALL_EAST;
+							arr[t.x() - base.x()][t.y() - base.y()] &= ~Graph.WALL_WEST;
+							arr[t.x() - base.x()][t.y() - base.y()] &= ~Graph.WALL_NORTH;
+							arr[t.x() - base.x()][t.y() - base.y()] &= ~Graph.WALL_SOUTH;
+							
+							arr[t.x() - base.x()][t.y() - base.y()] |= Graph.DOOR_CLOSED;
+						}
+					}
+					
+					return true;
+				}
+			});
+		}
+		
+		return new Graph(new Point(base.x(), base.y()), arr);
 	}
 	
 	public void addDoors(DoorType[] doors) {
