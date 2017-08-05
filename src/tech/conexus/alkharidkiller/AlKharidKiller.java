@@ -107,7 +107,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> {
 		enemies.select(new Filter<Npc>() {
 			@Override
 			public boolean accept(Npc npc) {
-				return npc.healthPercent() > 0;
+				return npc.healthPercent() > 0 && !npc.inCombat();
 			}
 		});
 		if (enemies.isEmpty()) {
@@ -165,11 +165,15 @@ public class AlKharidKiller extends PollingScript<ClientContext> {
 		if (Math.random() > 0.99) {
 			moveRandomly(5, 300);
 		} else if (Math.random() > 0.99) {
-			ctx.game.tab(Tab.STATS);
-			ctx.widgets.widget(320).component(TRAINING_MODE).hover();
+			hoverSkill(TRAINING_MODE);
 		} else if (Math.random() > 0.98) {
 			ctx.game.tab(Tab.INVENTORY);
 		}
+	}
+	
+	private void hoverSkill(int id) {
+		ctx.game.tab(Tab.STATS);
+		ctx.widgets.widget(320).component(id).hover();
 	}
 
 	/**
@@ -215,21 +219,19 @@ public class AlKharidKiller extends PollingScript<ClientContext> {
 		if (ctx.inventory.select().count() >= 28) {
 			walkTo(BANK_AREA.getRandomTile(), doors, 6);
 
-			ctx.bank.open();
-			ctx.bank.depositInventory();
-			ctx.bank.withdraw(FOOD_ID, 14);
+			if (ctx.bank.open())
+				if (ctx.bank.depositInventory())
+					ctx.bank.withdraw(FOOD_ID, 14);
 
 			walkToCombat();
 		}
 	}
 
 	private void loot() {
-		BasicQuery<GroundItem> items = ctx.groundItems.select().select(new Filter<GroundItem>() {
-			@Override
-			public boolean accept(GroundItem gI) {
-				return gI.name().contains("Grimy");
-			}
-		}).nearest().viewable();
+		BasicQuery<GroundItem> items = ctx.groundItems.select().id(HERB_IDS).nearest().viewable();
+		
+		if (Math.random() > 0.8)
+			items.shuffle();
 		
 		if (items.size() > 0) {
 			GroundItem herb = items.peek();
