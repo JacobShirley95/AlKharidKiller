@@ -185,6 +185,7 @@ public class LocalDoorPath extends Path{
 
 		if (bounds != null) {
 			door.bounds(bounds);
+			
 			if (!door.inViewport()) {
 				ctx.camera.turnTo(door, 50); 
 			}
@@ -227,9 +228,11 @@ public class LocalDoorPath extends Path{
 			if (curPath == null)
 				curPath = ctx.movement.newTilePath(tiles);
 			
-			
 			if (goingToDoor) {
-				door.bounds(getDoorBounds(door.id(), door.orientation()));
+				int[] bounds = getDoorBounds(door.id(), door.orientation());
+				if (bounds != null)
+					door.bounds(bounds);
+				
 				if (!door.inViewport())
 					return curPath.traverse(options);
 			} else {

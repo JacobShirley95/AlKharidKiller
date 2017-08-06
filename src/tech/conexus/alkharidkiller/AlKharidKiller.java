@@ -138,10 +138,6 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 			}
 		});
 		
-		System.out.println("I");
-		System.out.println(enemies.peek().interacting());
-		System.out.println(enemies.peek().interacting() instanceof Player);
-		
 		return enemies;
 	}
 	
@@ -199,7 +195,6 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 		GameObject obj = ctx.objects.select().select(new Filter<GameObject>() {
 			@Override
 			public boolean accept(GameObject o) {
-				System.out.println();
 				if (o.type().equals(Type.INTERACTIVE) && !Arrays.asList(o.actions()).contains("Examine"))
 					return true;
 				return false;
@@ -239,7 +234,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 			ctx.game.tab(Tab.INVENTORY);
 		} else if (Math.random() > 0.98) {
 			hoverNext();
-		} else if (Math.random() > 0.995) {
+		} else if (Math.random() > 0.998) {
 			examineRandom();
 		}
 	}

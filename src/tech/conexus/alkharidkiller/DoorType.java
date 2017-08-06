@@ -45,8 +45,8 @@ public enum DoorType {
 			
 			break;
 		case 2: 
-			bounds[0] = 128 - bounds[0];
-			bounds[1] = 128 - bounds[1];
+			bounds[0] = 128 - x1;
+			bounds[1] = 128 - x2;
 			break;
 		case 3: 
 			bounds[0] = z1;
