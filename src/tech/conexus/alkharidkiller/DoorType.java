@@ -1,5 +1,7 @@
 package tech.conexus.alkharidkiller;
 
+import java.util.Arrays;
+
 public enum DoorType {
 	AL_KHARID_PALACE_DOOR_LEFT(1513, 4, 20, -232, 0, 8, 128),
 	AL_KHARID_PALACE_DOOR_RIGHT(1511, -4, 20, -232, 0, 8, 128);
@@ -23,6 +25,8 @@ public enum DoorType {
 	private int[] fixBounds(int orientation) {
 		if (bounds == null)
 			return null;
+		
+		int[] bounds = Arrays.copyOf(this.bounds, this.bounds.length);
 		
 		int x1 = bounds[0];
 		int x2 = bounds[1];

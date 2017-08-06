@@ -27,6 +27,7 @@ public class Graph {
 	public static final int OBJECT_BLOCK = 0x200000;
 	public static final int DOOR_OPEN = 0x400000;
 	public static final int DOOR_CLOSED = 0x800000;
+	public static final int BLOCKED = OBJECT_TILE | OBJECT_BLOCK | DECORATION_BLOCK;
 	
 	public Graph(Point base, int width, int height) {
 		this.base = base;
@@ -60,6 +61,8 @@ public class Graph {
 		source = globalToLocal(source);
 		target = globalToLocal(target);
 		
+		Node targetNode = nodes[target.x][target.y];
+		
 		Node curr = nodes[source.x][source.y].copy();
 		curr.parent = null;
 		
@@ -81,7 +84,7 @@ public class Graph {
 				return path;
 			}
 			
-			List<Node> neighbours = getNeighbours(curr);
+			List<Node> neighbours = getNeighbours(curr, targetNode);
 			
 			for (Node n : neighbours) {
 				if (!visited[n.x][n.y] && !frontier.contains(n)) {
@@ -131,7 +134,20 @@ public class Graph {
 		}
 	}
 	
-	private List<Node> getNeighbours(Node local) {
+	public Node getNodeFromGlobal(Point p) {
+		p = globalToLocal(p);
+		return nodes[p.x][p.y];
+	}
+	
+	public boolean isBlocked(Node node) {
+		return (node.flags & BLOCKED) != 0;
+	}
+	
+	public boolean isBlocked(Node node, Node endNode) {
+		return !node.equals(endNode) && (node.flags & BLOCKED) != 0;
+	}
+	
+	private List<Node> getNeighbours(Node local, Node targetNode) {
 		List<Node> ps = new ArrayList<>();
 		
 		if (local.x < 0 || local.y < 0 || local.x >= width || local.y >= height) {
@@ -139,38 +155,46 @@ public class Graph {
 		}
 		
 		//System.out.println(local.x);
-		if (local.x + 1 < width && ((local.flags & WALL_EAST) == 0 || (nodes[local.x + 1][local.y].flags & DOOR_CLOSED) != 0))
-			ps.add(nodes[local.x + 1][local.y]);
+		if (local.x + 1 < width 
+			&& ((local.flags & WALL_EAST) == 0 || (nodes[local.x + 1][local.y].flags & DOOR_CLOSED) != 0)
+			&& !isBlocked(nodes[local.x + 1][local.y], targetNode))
+				ps.add(nodes[local.x + 1][local.y]);
 		
-		if (local.x > 0 && ((local.flags & WALL_WEST) == 0 || (nodes[local.x - 1][local.y].flags & DOOR_CLOSED) != 0)) {
-			/*if ((nodes[local.x - 1][local.y].flags & DOOR_CLOSED) != 0) {
-				System.out.println("FOUND DOOR");
-			}*/
-			ps.add(nodes[local.x - 1][local.y]);
-		}
+		if (local.x > 0 
+			&& ((local.flags & WALL_WEST) == 0 || (nodes[local.x - 1][local.y].flags & DOOR_CLOSED) != 0)
+		    && !isBlocked(nodes[local.x - 1][local.y], targetNode))
+				ps.add(nodes[local.x - 1][local.y]);
 		
-		if (local.y + 1 < height && ((local.flags & WALL_NORTH) == 0 || (nodes[local.x][local.y + 1].flags & DOOR_CLOSED) != 0))
-			ps.add(nodes[local.x][local.y + 1]);
+		if (local.y + 1 < height
+			&& ((local.flags & WALL_NORTH) == 0 || (nodes[local.x][local.y + 1].flags & DOOR_CLOSED) != 0)
+			&& !isBlocked(nodes[local.x][local.y + 1], targetNode))
+				ps.add(nodes[local.x][local.y + 1]);
 		
-		if (local.y > 0 && ((local.flags & WALL_SOUTH) == 0 || (nodes[local.x][local.y - 1].flags & DOOR_CLOSED) != 0))
+		if (local.y > 0 
+			&& ((local.flags & WALL_SOUTH) == 0 || (nodes[local.x][local.y - 1].flags & DOOR_CLOSED) != 0)
+			&& !isBlocked(nodes[local.x][local.y - 1], targetNode))
 			ps.add(nodes[local.x][local.y - 1]);
 		
 		if (local.x > 0 && local.y > 0 && (local.flags & (WALL_SOUTHWEST | WALL_SOUTH | WALL_WEST)) == 0 &&
+		   !isBlocked(nodes[local.x - 1][local.y - 1], targetNode) &&
 		   (nodes[local.x][local.y - 1].flags & WALL_WEST) == 0 &&
 		   (nodes[local.x - 1][local.y].flags & WALL_SOUTH) == 0)
 			ps.add(nodes[local.x - 1][local.y - 1]);
 		
 		if (local.x + 1 < width && local.y > 0 && (local.flags & (WALL_SOUTHEAST | WALL_SOUTH | WALL_EAST)) == 0 &&
+			!isBlocked(nodes[local.x + 1][local.y - 1], targetNode) &&
 			(nodes[local.x][local.y - 1].flags & WALL_EAST) == 0 &&
 			(nodes[local.x + 1][local.y].flags & WALL_SOUTH) == 0)
 			ps.add(nodes[local.x + 1][local.y - 1]);
 		
 		if (local.x + 1< width && local.y + 1< height && (local.flags & (WALL_NORTH | WALL_EAST | WALL_NORTHEAST)) == 0 &&
+			!isBlocked(nodes[local.x + 1][local.y + 1], targetNode) &&
 		    (nodes[local.x][local.y + 1].flags & WALL_EAST) == 0 &&
 			(nodes[local.x + 1][local.y].flags & WALL_NORTH) == 0)
 			ps.add(nodes[local.x + 1][local.y + 1]);
 		
 		if (local.x > 0 && local.y + 1 < height && (local.flags & (WALL_NORTH | WALL_WEST | WALL_NORTHWEST)) == 0 &&
+			!isBlocked(nodes[local.x - 1][local.y + 1], targetNode) &&
 		    (nodes[local.x][local.y + 1].flags & WALL_WEST) == 0 &&
 		    (nodes[local.x - 1][local.y].flags & WALL_NORTH) == 0)
 			ps.add(nodes[local.x - 1][local.y + 1]);

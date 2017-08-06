@@ -27,15 +27,16 @@ public class LocalDoorPath extends Path{
 	private Tile destination;
 	private ClientContext ctx;
 	private TilePath curPath;
-	private int curPathIndex;
+	private int curPathIndex = 0;
+	private boolean openDoors = false;
+	private boolean finished = false;
 
 	public LocalDoorPath(ClientContext ctx, Tile destination, boolean openDoors) {
-		this.graph = getGraph(openDoors);
 		this.ctx = ctx;
 		this.destination = destination;
 		this.doorNodes = new ArrayList<>();
-		
-		calculatePath(ctx, openDoors);
+		this.graph = null;
+		this.openDoors = openDoors;
 	}
 	
 	public LocalDoorPath(ClientContext ctx, Tile destination, List<DoorType> doors, boolean openDoors) {
@@ -76,17 +77,17 @@ public class LocalDoorPath extends Path{
 		}
 		
 		if (handleDoors) {
-			int[] ids = new int[doors.size()];
-			for (int i = 0; i < doors.size(); i++) {
-				ids[i] = doors.get(i).id();
-			}
+			int[] ids = doorIds();
 			
 			BasicQuery<GameObject> objs = ctx.objects.select().id(ids);
+			
 			objs.each(new Filter<GameObject>() {
 				@Override
 				public boolean accept(GameObject o) {
+					
 					for (DoorType dT : doors) {
 						if (dT.id() == o.id()) {
+							
 							Tile t = o.tile();
 							
 							arr[t.x() - base.x()][t.y() - base.y()] &= ~Graph.WALL_EAST;
@@ -135,6 +136,14 @@ public class LocalDoorPath extends Path{
 		return ids;
 	}
 	
+	public LocalDoorPath calculatePath() {
+		this.graph = getGraph(openDoors);
+		this.finished = false;
+		calculatePath(ctx, openDoors);
+		
+		return this;
+	}
+	
 	private void calculatePath(ClientContext ctx, boolean openDoors) {
 		Tile base = ctx.game.mapOffset();
 		Tile myPos = ctx.players.local().tile();
@@ -167,6 +176,7 @@ public class LocalDoorPath extends Path{
 	
 	private boolean openDoor(Tile doorTile) {
 		GameObject door = ctx.objects.select().id(doorIds()).at(doorTile).peek();
+		System.out.println("2: "+door.id());
 		if (!door.valid())
 			return true;
 		
@@ -175,8 +185,9 @@ public class LocalDoorPath extends Path{
 
 		if (bounds != null) {
 			door.bounds(bounds);
-			if (!door.inViewport())
-				ctx.camera.turnTo(door, 50);
+			if (!door.inViewport()) {
+				ctx.camera.turnTo(door, 50); 
+			}
 			
 			for (int tries = 0; tries < 3; tries++) {
 				if (door.interact("Open", door.name())) {
@@ -185,7 +196,7 @@ public class LocalDoorPath extends Path{
 						public Boolean call() throws Exception {
 							return !door.valid();
 						}
-					}, 300)) {
+					}, 100, 10)) {
 						return true;
 					}
 				}
@@ -197,25 +208,39 @@ public class LocalDoorPath extends Path{
 	
 	//EnumSet.of(TraversalOption.SPACE_ACTIONS, TraversalOption.HANDLE_RUN)
 	public boolean traverse(EnumSet<TraversalOption> options) {
+		if (finished || pathSegments.isEmpty()) 
+			return false;
+		
 		boolean goingToDoor = curPathIndex < pathSegments.size() - 1;
 		
 		Tile[] tiles = pathSegments.get(curPathIndex);
+		
+		if (curPathIndex == pathSegments.size() - 1 && destination.matrix(ctx).onMap())
+			finished = true;
+		
 		if (tiles.length > 0) {
-			Tile doorTile = tiles[tiles.length - 1];
-			GameObject door = ctx.objects.select().id(doorIds()).at(doorTile).peek();
+			Tile lastTile = tiles[tiles.length - 1];
+			GameObject door = ctx.objects.select().id(doorIds()).at(lastTile).peek();
+			
+			System.out.println(lastTile);
 			
 			if (curPath == null)
 				curPath = ctx.movement.newTilePath(tiles);
 			
+			
 			if (goingToDoor) {
+				door.bounds(getDoorBounds(door.id(), door.orientation()));
 				if (!door.inViewport())
 					return curPath.traverse(options);
-			} else
+			} else {
 				return curPath.traverse(options);
+			}
 		}
 		
+		System.out.println("DOOR TIME");
 		if (goingToDoor && openDoor(tiles[tiles.length - 1])) {
 			curPathIndex++;
+			curPath = null;
 			
 			return true;
 		}
