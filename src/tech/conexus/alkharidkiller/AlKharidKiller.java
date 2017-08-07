@@ -4,14 +4,18 @@ import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.text.SimpleDateFormat;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import org.powerbot.script.rt4.GameObject;
 import org.powerbot.script.rt4.GameObject.Type;
+import org.powerbot.script.rt4.GeItem;
 import org.powerbot.script.rt4.GroundItem;
 import org.powerbot.script.rt4.Interactive;
 import org.powerbot.script.rt4.Item;
@@ -45,6 +49,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	private final static int[] WARRIOR_BOUNDS = {-28, 28, -168, 0, -36, 36};
 	
 	private static final int[] HERB_IDS = new int[] {205, 207, 209, 211, 213, 215, 217, 219};
+	private static final int[] HERB_VALUES = new int[HERB_IDS.length];
 	
 	private static final int WARRIOR_ID = 7323;
 	private static final int FOOD_ID = 333;
@@ -61,7 +66,9 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 			new Tile(3271, 3170));
 	private static final Area WARRIOR_AREA = new Area(new Tile(3288, 3168), new Tile(3297, 3168), new Tile(3288, 3175),
 			new Tile(3297, 3175));
-	private static final Area COMBAT_AREA = new Area(new Tile(3282, 3159), new Tile(3303, 3177));
+	private static final Area COMBAT_AREA = new Area(new Tile(3287, 3167), new Tile(3303, 3177));
+	
+	private int pickedUpValue = 0;
 
 	public AlKharidKiller() {
 
@@ -70,7 +77,12 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	@Override
 	public void start() {
 		Condition.sleep(1000);
+		ctx.input.speed(-50);
 		ctx.camera.pitch(true);
+		
+		for (int i = 0; i < HERB_VALUES.length; i++) {
+			HERB_VALUES[i] = new GeItem(HERB_IDS[i]).price;
+		}
 		//walkToCombat();
 		//left 3285, 3171
 		//walkTo(new Tile(3290, 3164), doors, 6);
@@ -146,7 +158,16 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 		
 		if (enemies.isEmpty()) {
 			System.out.println("no warriors about, clicking on mm");
-			enemies = ctx.npcs.select().id(WARRIOR_ID).shuffle();
+			enemies = ctx.npcs.select().id(WARRIOR_ID).select(new Filter<Npc>() {
+				@Override
+				public boolean accept(Npc npc) {
+					if (npc.healthPercent() == 0)
+						return false;
+					
+					return true;
+				}
+				
+			}).shuffle();
 			
 			Tile target = enemies.peek().tile().derive(-2 + ((int)Math.random() * 4), -2 + ((int)Math.random() * 4));
 			
@@ -163,6 +184,8 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 			handlePathToEntity(first.tile(), first);
 			
 			if (first.interact("Attack")) {
+				System.out.println("a");
+				System.out.println(ctx.players.local().interacting());
 				Condition.wait(new Callable<Boolean>() {
 					@Override
 					public Boolean call() throws Exception {
@@ -195,7 +218,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 		GameObject obj = ctx.objects.select().select(new Filter<GameObject>() {
 			@Override
 			public boolean accept(GameObject o) {
-				if (o.type().equals(Type.INTERACTIVE) && !Arrays.asList(o.actions()).contains("Examine"))
+				if (o.name() != null && !o.name().equals("null") && o.type().equals(Type.INTERACTIVE))
 					return true;
 				return false;
 			}
@@ -242,6 +265,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	private void hoverSkill(int id) {
 		ctx.game.tab(Tab.STATS);
 		ctx.widgets.widget(320).component(id).hover();
+		Condition.sleep((int)(1500 + (Math.random() * 2000)));
 	}
 
 	/**
@@ -288,7 +312,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 
 			if (ctx.bank.open())
 				if (ctx.bank.depositInventory())
-					ctx.bank.withdraw(FOOD_ID, 14);
+					ctx.bank.withdraw(FOOD_ID, 7);
 
 			walkToCombat();
 		}
@@ -306,8 +330,9 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 			handlePathToEntity(herb.tile(), herb);
 
 			for (int tries = 0; tries < 3; tries++) {
-				if (herb.valid()) {
+				if (herb.valid() && herb.tile().matrix(ctx).reachable()) {
 					int c = ctx.inventory.select().id(herb.id()).size();
+					int id = herb.id();
 					if (herb.interact("Take", herb.name())) {
 						ctx.game.tab(Tab.INVENTORY);
 						if (Condition.wait(new Callable<Boolean>() {
@@ -317,11 +342,17 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 							}
 						}, 300)) {
 							System.out.println("Picked up: " + herb.name());
+							for (int i = 0; i < HERB_IDS.length; i++) {
+								if (id == HERB_IDS[i]) {
+									pickedUpValue += HERB_VALUES[i];
+									break;
+								}
+							}
 							Condition.sleep(500);
 							break;
 						}
 					}
-				}
+				} else break;
 			}
 		}
 	}
@@ -340,6 +371,10 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 		int expPh = (int) (3600000d / (long) runTime * (double) (expGain));
 		
 		return expPh;
+	}
+	
+	private int getMoneyPerHour() {
+		return 0;
 	}
 
 	private void handlePathToEntity(Tile tile, Interactive entity) {
@@ -367,11 +402,29 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	private boolean inCombat() {
 		return ctx.players.local().interacting().valid();
 	}
+	
+	public static String formatInterval(final long interval, boolean millisecs )
+	{
+	    final long hr = TimeUnit.MILLISECONDS.toHours(interval);
+	    final long min = TimeUnit.MILLISECONDS.toMinutes(interval) %60;
+	    final long sec = TimeUnit.MILLISECONDS.toSeconds(interval) %60;
+	    final long ms = TimeUnit.MILLISECONDS.toMillis(interval) %1000;
+	    if( millisecs ) {
+	        return String.format("%02d:%02d:%02d.%03d", hr, min, sec, ms);
+	    } else {
+	        return String.format("%02d:%02d:%02d", hr, min, sec );
+	    }
+	}
 
 	@Override
 	public void repaint(Graphics g) {
 		Graphics2D g2 = (Graphics2D)g;
 		g2.setColor(Color.red);
-		g2.drawString("Strength EXP/Hr: " + getXPPerHour(), 10, 30);
+		
+		long runtime = getRuntime();
+		
+		g2.drawString("Time running: " + formatInterval(runtime, false), 10, 30);
+		g2.drawString("Strength EXP/Hr: " + getXPPerHour(), 10, 50);
+		g2.drawString("Money made: " + pickedUpValue + " gp", 10, 70);
 	}
 }

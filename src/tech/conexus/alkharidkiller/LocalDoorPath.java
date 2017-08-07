@@ -157,7 +157,8 @@ public class LocalDoorPath extends Path{
 			List<Tile> segmentList = new ArrayList<>();
 				
 			for (Node n : path) {
-				segmentList.add(base.derive(n.x, n.y));
+				Tile t = base.derive(n.x, n.y);
+				segmentList.add(t);
 				if (openDoors && (n.flags & Graph.DOOR_CLOSED) != 0) {
 					doorNodes.add(n);
 					
