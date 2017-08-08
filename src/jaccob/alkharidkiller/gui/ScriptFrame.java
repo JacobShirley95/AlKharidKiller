@@ -1,4 +1,4 @@
-package tech.conexus.alkharidkiller.gui;
+package jaccob.alkharidkiller.gui;
 
 import java.awt.BorderLayout;
 import java.awt.ComponentOrientation;

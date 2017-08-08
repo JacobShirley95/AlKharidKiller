@@ -1,4 +1,4 @@
-package tech.conexus.alkharidkiller;
+package jaccob.alkharidkiller;
 
 public class Node {
 	public int x;

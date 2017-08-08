@@ -1,4 +1,4 @@
-package tech.conexus.alkharidkiller;
+package jaccob.alkharidkiller;
 
 import java.awt.Point;
 import java.util.ArrayList;
@@ -61,6 +61,13 @@ public class LocalDoorPath extends Path{
 	public Tile end() {
 		// TODO Auto-generated method stub
 		return null;
+	}
+	
+	public int getLength() {
+		int c = 0;
+		for (Tile[] tiles : pathSegments)
+			c += tiles.length;
+		return c;
 	}
 	
 	private Graph getGraph(boolean handleDoors) {
@@ -223,9 +230,7 @@ public class LocalDoorPath extends Path{
 		if (tiles.length > 0) {
 			Tile lastTile = tiles[tiles.length - 1];
 			GameObject door = ctx.objects.select().id(doorIds()).at(lastTile).peek();
-			
-			System.out.println(lastTile);
-			
+
 			if (curPath == null)
 				curPath = ctx.movement.newTilePath(tiles);
 			
@@ -241,7 +246,6 @@ public class LocalDoorPath extends Path{
 			}
 		}
 		
-		System.out.println("DOOR TIME");
 		if (goingToDoor && openDoor(tiles[tiles.length - 1])) {
 			curPathIndex++;
 			curPath = null;

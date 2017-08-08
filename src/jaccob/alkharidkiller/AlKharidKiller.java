@@ -1,4 +1,4 @@
-package tech.conexus.alkharidkiller;
+package jaccob.alkharidkiller;
 
 import java.awt.Color;
 import java.awt.Graphics;
@@ -7,8 +7,11 @@ import java.awt.Point;
 import java.text.SimpleDateFormat;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -40,6 +43,7 @@ import org.powerbot.script.rt4.Path;
 import org.powerbot.script.rt4.Path.TraversalOption;
 import org.powerbot.script.rt4.Player;
 import org.powerbot.script.rt4.Skills;
+import org.powerbot.script.rt6.LocalPath;
 
 @Script.Manifest(name = "AlKharidKillar", description = "Kills al kharid warriors and loots", properties = "client=4; topic=0;")
 public class AlKharidKiller extends PollingScript<ClientContext> implements PaintListener{
@@ -60,7 +64,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	private static final int STATS_DEFENCE_ID = 3;
 	private static final int STATS_HP_ID = 9;
 	
-	private static final int TRAINING_MODE = STATS_STRENGTH_ID;
+	private static final int TRAINING_MODE = STATS_ATTACK_ID;
 
 	private static final Area BANK_AREA = new Area(new Tile(3269, 3164), new Tile(3271, 3164), new Tile(3269, 3170),
 			new Tile(3271, 3170));
@@ -175,6 +179,28 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 			
 			walkTo(target, doors, 6);
 		} else {
+			Map<Npc, Integer> distances = new HashMap<>();
+			int c = 0;
+			
+			long marker = System.currentTimeMillis();
+			if (enemies.size() > 1) {
+				enemies.forEach(new Consumer<Npc>() {
+					@Override
+					public void accept(Npc npc) {
+						distances.put(npc, new LocalDoorPath(ctx, npc.tile(), doors, true).calculatePath().getLength());
+					}
+				});
+				
+				System.out.println("time: " + (System.currentTimeMillis() - marker));
+				
+				enemies.sort(new Comparator<Npc>() {
+					@Override
+					public int compare(Npc n1, Npc n2) {
+						return distances.get(n1) - distances.get(n2);
+					}
+				});
+			}
+			
 			Npc first = enemies.peek();
 	
 			if (Math.random() > 0.8) {
@@ -184,8 +210,6 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 			handlePathToEntity(first.tile(), first);
 			
 			if (first.interact("Attack")) {
-				System.out.println("a");
-				System.out.println(ctx.players.local().interacting());
 				Condition.wait(new Callable<Boolean>() {
 					@Override
 					public Boolean call() throws Exception {
@@ -362,11 +386,11 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	
 	private int getXPPerHour() {
 		if (startXP == -1) {
-			startXP = ctx.skills.experience(Constants.SKILLS_STRENGTH);
+			startXP = ctx.skills.experience(Constants.SKILLS_ATTACK);
 		}
 		
 		long runTime = getRuntime();
-		int currentExp = ctx.skills.experience(Constants.SKILLS_STRENGTH);
+		int currentExp = ctx.skills.experience(Constants.SKILLS_ATTACK);
 		int expGain = currentExp - startXP;
 		int expPh = (int) (3600000d / (long) runTime * (double) (expGain));
 		
@@ -400,7 +424,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	}
 
 	private boolean inCombat() {
-		return ctx.players.local().interacting().valid();
+		return ctx.players.local().interacting().valid() && ctx.players.local().inCombat();
 	}
 	
 	public static String formatInterval(final long interval, boolean millisecs )
@@ -419,12 +443,12 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	@Override
 	public void repaint(Graphics g) {
 		Graphics2D g2 = (Graphics2D)g;
-		g2.setColor(Color.red);
+		g2.setColor(Color.green);
 		
 		long runtime = getRuntime();
 		
 		g2.drawString("Time running: " + formatInterval(runtime, false), 10, 30);
-		g2.drawString("Strength EXP/Hr: " + getXPPerHour(), 10, 50);
+		g2.drawString("Xp/Hr: " + getXPPerHour(), 10, 50);
 		g2.drawString("Money made: " + pickedUpValue + " gp", 10, 70);
 	}
 }
