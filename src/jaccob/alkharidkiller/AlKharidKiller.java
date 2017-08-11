@@ -411,7 +411,6 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 
 		while (!ctx.controller.isStopping() && path.traverse()) {
 			if (entity.inViewport() && tile.matrix(ctx).reachable()) {
-				System.out.println(entity);
 				break;
 			} else {
 				Condition.sleep(1000);
@@ -424,7 +423,16 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	}
 
 	private boolean inCombat() {
-		return ctx.players.local().interacting().valid() && ctx.players.local().inCombat();
+		final Player player = ctx.players.local();
+		if (player.interacting().valid()) {
+			return Condition.wait(new Callable<Boolean>() {
+				@Override
+				public Boolean call() throws Exception {
+					return player.inCombat();
+				}
+			}, 100, 20);
+		}
+		return false;
 	}
 	
 	public static String formatInterval(final long interval, boolean millisecs )
