@@ -1,4 +1,4 @@
-package tech.conexus.alkharidkiller;
+package jaccob.alkharidkiller;
 
 import java.awt.Point;
 import java.util.ArrayList;
@@ -61,6 +61,13 @@ public class LocalDoorPath extends Path{
 	public Tile end() {
 		// TODO Auto-generated method stub
 		return null;
+	}
+	
+	public int getLength() {
+		int c = 0;
+		for (Tile[] tiles : pathSegments)
+			c += tiles.length;
+		return c;
 	}
 	
 	private Graph getGraph(boolean handleDoors) {
@@ -157,7 +164,8 @@ public class LocalDoorPath extends Path{
 			List<Tile> segmentList = new ArrayList<>();
 				
 			for (Node n : path) {
-				segmentList.add(base.derive(n.x, n.y));
+				Tile t = base.derive(n.x, n.y);
+				segmentList.add(t);
 				if (openDoors && (n.flags & Graph.DOOR_CLOSED) != 0) {
 					doorNodes.add(n);
 					
@@ -176,7 +184,6 @@ public class LocalDoorPath extends Path{
 	
 	private boolean openDoor(Tile doorTile) {
 		GameObject door = ctx.objects.select().id(doorIds()).at(doorTile).peek();
-		System.out.println("2: "+door.id());
 		if (!door.valid())
 			return true;
 		
@@ -197,7 +204,7 @@ public class LocalDoorPath extends Path{
 						public Boolean call() throws Exception {
 							return !door.valid();
 						}
-					}, 100, 10)) {
+					}, 100, 30)) {
 						return true;
 					}
 				}
@@ -222,9 +229,7 @@ public class LocalDoorPath extends Path{
 		if (tiles.length > 0) {
 			Tile lastTile = tiles[tiles.length - 1];
 			GameObject door = ctx.objects.select().id(doorIds()).at(lastTile).peek();
-			
-			System.out.println(lastTile);
-			
+
 			if (curPath == null)
 				curPath = ctx.movement.newTilePath(tiles);
 			
@@ -240,7 +245,6 @@ public class LocalDoorPath extends Path{
 			}
 		}
 		
-		System.out.println("DOOR TIME");
 		if (goingToDoor && openDoor(tiles[tiles.length - 1])) {
 			curPathIndex++;
 			curPath = null;
