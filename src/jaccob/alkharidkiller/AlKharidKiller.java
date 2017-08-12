@@ -118,7 +118,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 				public Boolean call() throws Exception {
 					return ctx.movement.distance(ctx.movement.destination()) < distanceToNextClick;
 				}
-			});
+			}, 300, 200);
 		}
 	}
 	
@@ -180,9 +180,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 			walkTo(target, doors, 6);
 		} else {
 			Map<Npc, Integer> distances = new HashMap<>();
-			int c = 0;
 			
-			long marker = System.currentTimeMillis();
 			if (enemies.size() > 1) {
 				enemies.forEach(new Consumer<Npc>() {
 					@Override
@@ -190,9 +188,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 						distances.put(npc, new LocalDoorPath(ctx, npc.tile(), doors, true).calculatePath().getLength());
 					}
 				});
-				
-				System.out.println("time: " + (System.currentTimeMillis() - marker));
-				
+
 				enemies.sort(new Comparator<Npc>() {
 					@Override
 					public int compare(Npc n1, Npc n2) {
@@ -206,16 +202,19 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 			if (Math.random() > 0.8) {
 				ctx.camera.turnTo(first, (int) (Math.random() * 70));
 			}
-	
+			
 			handlePathToEntity(first.tile(), first);
 			
 			if (first.interact("Attack")) {
-				Condition.wait(new Callable<Boolean>() {
-					@Override
-					public Boolean call() throws Exception {
-						return inCombat();
-					}
-				}, 300);
+				Condition.sleep(500);
+				if (ctx.players.local().interacting().valid()) {
+					Condition.wait(new Callable<Boolean>() {
+						@Override
+						public Boolean call() throws Exception {
+							return inCombat();
+						}
+					}, 300);
+				}
 			}
 		}
 	}
@@ -333,6 +332,8 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	private void bank() {
 		if (ctx.inventory.select().count() >= 28) {
 			walkTo(BANK_AREA.getRandomTile(), doors, 6);
+			
+			Condition.sleep(2000);
 
 			if (ctx.bank.open())
 				if (ctx.bank.depositInventory())
@@ -402,6 +403,9 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	}
 
 	private void handlePathToEntity(Tile tile, Interactive entity) {
+		if (tile.matrix(ctx).reachable())
+			return;
+		
 		LocalDoorPath path = new LocalDoorPath(ctx, tile, doors, true);
 		path.calculatePath();
 		

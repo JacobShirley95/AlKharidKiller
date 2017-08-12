@@ -184,7 +184,6 @@ public class LocalDoorPath extends Path{
 	
 	private boolean openDoor(Tile doorTile) {
 		GameObject door = ctx.objects.select().id(doorIds()).at(doorTile).peek();
-		System.out.println("2: "+door.id());
 		if (!door.valid())
 			return true;
 		
@@ -205,7 +204,7 @@ public class LocalDoorPath extends Path{
 						public Boolean call() throws Exception {
 							return !door.valid();
 						}
-					}, 100, 10)) {
+					}, 100, 30)) {
 						return true;
 					}
 				}
