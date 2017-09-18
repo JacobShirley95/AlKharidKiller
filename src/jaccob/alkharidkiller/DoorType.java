@@ -4,7 +4,12 @@ import java.util.Arrays;
 
 public enum DoorType {
 	AL_KHARID_PALACE_DOOR_LEFT(1513, 4, 20, -232, 0, 8, 128),
-	AL_KHARID_PALACE_DOOR_RIGHT(1511, -4, 20, -232, 0, 8, 128);
+	AL_KHARID_PALACE_DOOR_RIGHT(1511, -4, 20, -232, 0, 8, 128),
+	
+	GATE_1(1558, 4, -12, -128, 0, 0, 116),
+	GATE_2(1560, 4, -12, -128, 0, 0, 116),
+	
+	DOOR(1535, 12, -4, -208, 0, 4, 112);
 	
 	private int id;
 	private int[] bounds;

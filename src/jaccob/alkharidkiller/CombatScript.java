@@ -6,6 +6,7 @@ import java.awt.Graphics2D;
 import java.awt.Point;
 import java.text.SimpleDateFormat;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -45,17 +46,9 @@ import org.powerbot.script.rt4.Player;
 import org.powerbot.script.rt4.Skills;
 import org.powerbot.script.rt6.LocalPath;
 
-@Script.Manifest(name = "AlKharidKillar", description = "Kills al kharid warriors and loots", properties = "client=4; topic=0;")
-public class AlKharidKiller extends PollingScript<ClientContext> implements PaintListener{
-
-	private DoorType[] doors = new DoorType[] { DoorType.AL_KHARID_PALACE_DOOR_LEFT, DoorType.AL_KHARID_PALACE_DOOR_RIGHT };
-	
-	private final static int[] WARRIOR_BOUNDS = {-28, 28, -168, 0, -36, 36};
-	
-	private static final int[] HERB_IDS = new int[] {205, 207, 209, 211, 213, 215, 217, 219};
-	private static final int[] HERB_VALUES = new int[HERB_IDS.length];
-	
-	private static final int WARRIOR_ID = 7323;
+@Script.Manifest(name = "CombatScript", description = "Kills any pre-defined warrior and opens doors/gates", properties = "client=4; topic=0;")
+public class CombatScript extends PollingScript<ClientContext> implements PaintListener{
+	private static final boolean SHOULD_LOOT = false;
 	private static final int FOOD_ID = 333;
 	
 	private static final int STATS_WIDGET_ID = 320;
@@ -64,17 +57,69 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	private static final int STATS_DEFENCE_ID = 3;
 	private static final int STATS_HP_ID = 9;
 	
-	private static final int TRAINING_MODE = STATS_ATTACK_ID;
+	private static final int TRAINING_MODE = STATS_STRENGTH_ID;
 
 	private static final Area BANK_AREA = new Area(new Tile(3269, 3164), new Tile(3271, 3164), new Tile(3269, 3170),
 			new Tile(3271, 3170));
-	private static final Area WARRIOR_AREA = new Area(new Tile(3288, 3168), new Tile(3297, 3168), new Tile(3288, 3175),
-			new Tile(3297, 3175));
-	private static final Area COMBAT_AREA = new Area(new Tile(3287, 3167), new Tile(3303, 3177));
+
+	//new int[] {7323}, new int[][] {new int[] {-28, 28, -168, 0, -36, 36}}, 
+	enum CombatZone {
+		AL_KHARID(new Area(new Tile(3287, 3167), new Tile(3303, 3177)), 
+				  new DoorType[] {DoorType.AL_KHARID_PALACE_DOOR_LEFT, 
+						  		  DoorType.AL_KHARID_PALACE_DOOR_RIGHT}),
+		
+		CHICKENS(new Area(new Tile(3225, 3296), new Tile(3233, 3300)), 
+				  new DoorType[] {DoorType.GATE_1, 
+						  		  DoorType.GATE_2,
+						  		  DoorType.DOOR});
+		
+		public Area area;
+		public DoorType[] doors;
+
+		CombatZone(Area area, DoorType[] doors) {
+			this.area = area;
+			this.doors = doors;
+		}
+	}
+	
+	enum NpcType {
+		CHICKEN(new int[] {2692, 2693}, new int[] {-20, 20, -68, 0, -20, 20}),
+		WARRIOR(new int[] {7323}, new int[] {-28, 28, -168, 0, -36, 36});
+		
+		public int[] ids;
+		public int[] bounds;
+		
+		NpcType(int[] ids, int[] bounds) {
+			this.ids = ids;
+			this.bounds = bounds;
+		}
+	}
+	
+	enum ScriptArea {
+		AL_KHARID(CombatZone.AL_KHARID, new NpcType[] {NpcType.WARRIOR}, new int[] {205, 207, 209, 211, 213, 215, 217, 219}, true),
+		LUM_CHICKENS(CombatZone.CHICKENS, new NpcType[] {NpcType.CHICKEN}, new int[] {314}, false);
+		
+		public CombatZone zone;
+		public NpcType[] npcs;
+		public int[] lootIds;
+		public boolean banking;
+		
+		private ScriptArea(CombatZone zone, NpcType[] npcs, int[] lootIds, boolean banking) {
+			this.zone = zone;
+			this.npcs = npcs;
+			this.lootIds = lootIds;
+			this.banking = banking;
+		}
+	}
+	
+	ScriptArea SCR = ScriptArea.LUM_CHICKENS;
+	CombatZone zone = SCR.zone;
+	NpcType[] npcs = SCR.npcs;
+	int[] lootValues = new int[SCR.lootIds.length];
 	
 	private int pickedUpValue = 0;
 
-	public AlKharidKiller() {
+	public CombatScript() {
 
 	}
 
@@ -84,8 +129,8 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 		ctx.input.speed(-50);
 		ctx.camera.pitch(true);
 		
-		for (int i = 0; i < HERB_VALUES.length; i++) {
-			HERB_VALUES[i] = new GeItem(HERB_IDS[i]).price;
+		for (int i = 0; i < lootValues.length; i++) {
+			lootValues[i] = new GeItem(SCR.lootIds[i]).price;
 		}
 		//walkToCombat();
 		//left 3285, 3171
@@ -96,19 +141,19 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	public void poll() {
 		eat();
 
-		if (!inMotion()) {
-			loot();
+		//if (!inMotion()) {
 			if (!inCombat()) {
+				if (SHOULD_LOOT && loot())
+					return;
+				
 				bank();
-
 				attack();
 			} else {
 				run();
+
 				antiban();
 			}
-		} else {
-
-		}
+		//}
 	}
 	
 	private void walkPath(LocalDoorPath path, int distanceToNextClick) {
@@ -132,7 +177,15 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	}
 	
 	private BasicQuery<Npc> getEnemies() {
-		BasicQuery<Npc> enemies = ctx.npcs.select().id(WARRIOR_ID).nearest().limit(6).select(Interactive.doSetBounds(WARRIOR_BOUNDS)).viewable();
+		BasicQuery<Npc> enemies = filterNpcs(npcs).nearest().limit(6).select(new Filter<Npc>() {
+			@Override
+			public boolean accept(Npc npc) {
+				npc.bounds(getBounds(npc.id(), npcs));
+				
+				return true;
+			}
+		}).viewable();
+		
 		if (Math.random() > 0.8) {
 			enemies.shuffle();
 		}
@@ -143,7 +196,6 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 				if (interaction instanceof Player) {
 					Player p = (Player)interaction;
 					if (!p.interacting().equals(npc)) {
-						
 						return true;
 					} else {
 						return false;
@@ -157,12 +209,30 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 		return enemies;
 	}
 	
+	private int[] getBounds(int id, NpcType[] npcs) {
+		for (NpcType npc : npcs) {
+			for (int id2 : npc.ids)
+				if (id2 == id)
+					return npc.bounds;
+		}
+		return null;
+	}
+	
+	private BasicQuery<Npc> filterNpcs(NpcType[] npcs) {
+		BasicQuery<Npc> q = ctx.npcs.select();
+		for (NpcType npc : npcs) {
+			q.id(npc.ids);
+		}
+		
+		return q;
+	}
+	
 	private void attack() {
 		BasicQuery<Npc> enemies = getEnemies();
 		
 		if (enemies.isEmpty()) {
 			System.out.println("no warriors about, clicking on mm");
-			enemies = ctx.npcs.select().id(WARRIOR_ID).select(new Filter<Npc>() {
+			enemies = filterNpcs(npcs).select(new Filter<Npc>() {
 				@Override
 				public boolean accept(Npc npc) {
 					if (npc.healthPercent() == 0)
@@ -175,9 +245,9 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 			
 			Tile target = enemies.peek().tile().derive(-2 + ((int)Math.random() * 4), -2 + ((int)Math.random() * 4));
 			
-			target = COMBAT_AREA.getClosestTo(target);
+			target = zone.area.getClosestTo(target);
 			
-			walkTo(target, doors, 6);
+			walkTo(target, zone.doors, 6);
 		} else {
 			Map<Npc, Integer> distances = new HashMap<>();
 			
@@ -185,7 +255,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 				enemies.forEach(new Consumer<Npc>() {
 					@Override
 					public void accept(Npc npc) {
-						distances.put(npc, new LocalDoorPath(ctx, npc.tile(), doors, true).calculatePath().getLength());
+						distances.put(npc, new LocalDoorPath(ctx, npc.tile(), zone.doors, true).calculatePath().getLength());
 					}
 				});
 
@@ -200,18 +270,22 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 			Npc first = enemies.peek();
 	
 			if (Math.random() > 0.8) {
-				ctx.camera.turnTo(first, (int) (Math.random() * 70));
+				//ctx.camera.turnTo(first, (int) (Math.random() * 70));
 			}
 			
 			handlePathToEntity(first.tile(), first);
 			
-			if (first.interact("Attack")) {
-				Condition.sleep(500);
-				if (ctx.players.local().interacting().valid()) {
+			if (first.interact("Attack", first.name())) {
+				if (Condition.wait(new Callable<Boolean>() {
+					@Override
+					public Boolean call() throws Exception {
+						return ctx.players.local().interacting().valid();
+					}
+				}, 50, 10)) {
 					Condition.wait(new Callable<Boolean>() {
 						@Override
 						public Boolean call() throws Exception {
-							return inCombat();
+							return first.inCombat() || first.interacting().valid();
 						}
 					}, 300);
 				}
@@ -326,25 +400,27 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 	}
 
 	private void walkToCombat() {
-		walkTo(WARRIOR_AREA.getRandomTile(), doors, 6);
+		walkTo(zone.area.getRandomTile(), zone.doors, 6);
 	}
 
 	private void bank() {
-		if (ctx.inventory.select().count() >= 28) {
-			walkTo(BANK_AREA.getRandomTile(), doors, 6);
-			
-			Condition.sleep(2000);
-
-			if (ctx.bank.open())
-				if (ctx.bank.depositInventory())
-					ctx.bank.withdraw(FOOD_ID, 7);
-
-			walkToCombat();
+		if (SCR.banking) {
+			if (ctx.inventory.select().count() >= 28) {
+				walkTo(BANK_AREA.getRandomTile(), zone.doors, 6);
+				
+				Condition.sleep(2000);
+	
+				if (ctx.bank.open())
+					if (ctx.bank.depositInventory())
+						ctx.bank.withdraw(FOOD_ID, 7);
+	
+				walkToCombat();
+			}
 		}
 	}
 
-	private void loot() {
-		BasicQuery<GroundItem> items = ctx.groundItems.select().id(HERB_IDS).nearest().viewable();
+	private boolean loot() {
+		BasicQuery<GroundItem> items = ctx.groundItems.select().id(SCR.lootIds).nearest().viewable();
 		
 		if (Math.random() > 0.8)
 			items.shuffle();
@@ -356,30 +432,33 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 
 			for (int tries = 0; tries < 3; tries++) {
 				if (herb.valid() && herb.tile().matrix(ctx).reachable()) {
-					int c = ctx.inventory.select().id(herb.id()).size();
+					int c = ctx.inventory.select().id(herb.id()).count(true);
 					int id = herb.id();
 					if (herb.interact("Take", herb.name())) {
 						ctx.game.tab(Tab.INVENTORY);
 						if (Condition.wait(new Callable<Boolean>() {
 							@Override
 							public Boolean call() throws Exception {
-								return ctx.inventory.select().id(herb.id()).size() > c;
+								return ctx.inventory.select().id(herb.id()).count(true) > c;
 							}
 						}, 300)) {
 							System.out.println("Picked up: " + herb.name());
-							for (int i = 0; i < HERB_IDS.length; i++) {
-								if (id == HERB_IDS[i]) {
-									pickedUpValue += HERB_VALUES[i];
+							int[] ids = SCR.lootIds;
+							for (int i = 0; i < ids.length; i++) {
+								if (id == ids[i]) {
+									pickedUpValue += lootValues[i] * herb.stackSize();
 									break;
 								}
 							}
 							Condition.sleep(500);
-							break;
+							return true;
 						}
 					}
-				} else break;
+				}
 			}
 		}
+		
+		return false;
 	}
 	
 	private int lastXP = -1;
@@ -406,7 +485,7 @@ public class AlKharidKiller extends PollingScript<ClientContext> implements Pain
 		if (tile.matrix(ctx).reachable())
 			return;
 		
-		LocalDoorPath path = new LocalDoorPath(ctx, tile, doors, true);
+		LocalDoorPath path = new LocalDoorPath(ctx, tile, zone.doors, true);
 		path.calculatePath();
 		
 		if (path.getDoorNodes().isEmpty()) {
