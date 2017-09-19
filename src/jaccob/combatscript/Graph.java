@@ -1,4 +1,4 @@
-package jaccob.alkharidkiller;
+package jaccob.combatscript;
 
 import java.awt.Point;
 import java.util.ArrayList;
@@ -60,6 +60,10 @@ public class Graph {
 		
 		source = globalToLocal(source);
 		target = globalToLocal(target);
+		
+		if (target.x < 0 || target.y < 0)
+			return null;
+		
 		
 		Node targetNode = nodes[target.x][target.y];
 		

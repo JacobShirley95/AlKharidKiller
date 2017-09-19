@@ -1,4 +1,4 @@
-package jaccob.alkharidkiller;
+package jaccob.combatscript;
 
 import java.util.Arrays;
 

@@ -1,4 +1,4 @@
-package jaccob.alkharidkiller;
+package jaccob.combatscript;
 
 import java.awt.Point;
 import java.util.ArrayList;

@@ -1,4 +1,4 @@
-package jaccob.alkharidkiller;
+package jaccob.combatscript;
 
 public class Node {
 	public int x;

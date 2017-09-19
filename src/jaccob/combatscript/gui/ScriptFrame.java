@@ -1,4 +1,4 @@
-package jaccob.alkharidkiller.gui;
+package jaccob.combatscript.gui;
 
 import java.awt.BorderLayout;
 import java.awt.ComponentOrientation;
