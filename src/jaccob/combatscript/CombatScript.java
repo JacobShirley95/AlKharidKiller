@@ -53,7 +53,7 @@ import org.powerbot.script.rt6.Menu;
 @Script.Manifest(name = "CombatScript", description = "Kills any pre-defined warrior and opens doors/gates", properties = "client=4; topic=0;")
 public class CombatScript extends PollingScript<ClientContext> implements PaintListener{
 	private static final boolean SHOULD_LOOT = false;
-	private static final boolean PICK_UP_ARROW_CLUMPS = true;
+	private static final boolean PICK_UP_ARROW_CLUMPS = false;
 	private static final int ARROW_ID = 884;
 	private static final int FOOD_ID = 333; //1965
 	
@@ -65,7 +65,7 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 	private static final int STATS_MAGIC_ID = 6;
 	private static final int STATS_HP_ID = 9;
 	
-	private static final int TRAINING_MODE = STATS_RANGED_ID;
+	private static final int TRAINING_MODE = STATS_ATTACK_ID;
 
 	//new int[] {7323}, new int[][] {new int[] {-28, 28, -168, 0, -36, 36}}, 
 	enum CombatZone {
@@ -473,7 +473,7 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 					}
 				}, 50, 10)) {
 					Condition.sleep(300);
-					System.out.println("not interacting");
+					boolean mC = isMultiCombat(target);
 					mode = ScriptMode.TARGETTING;
 					return Condition.wait(new Callable<Boolean>() {
 						@Override
@@ -482,15 +482,18 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 								hovering = targetted;
 								return true;
 							}
+							
 							hoverNext();
-							if (!first.tile().matrix(ctx).reachable())
+							if (!first.tile().matrix(ctx).reachable() || !first.valid() || first.healthPercent() == 0)
 								return true;
 							
-							return first.healthPercent() == 0 || first.inCombat() || first.interacting().valid();
+							if (mC && myPlayer.inMotion())
+								return false;
+							
+							return first.inCombat() || first.interacting().valid();
 						}
 					}, 300);
 				} else {
-					System.out.println("no interacting");
 				}
 			}
 		}
