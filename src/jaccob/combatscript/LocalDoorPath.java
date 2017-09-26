@@ -30,6 +30,7 @@ public class LocalDoorPath extends Path{
 	private int curPathIndex = 0;
 	private boolean openDoors = false;
 	private boolean finished = false;
+	private boolean reachable = false;
 
 	public LocalDoorPath(ClientContext ctx, Tile destination, boolean openDoors) {
 		this.ctx = ctx;
@@ -151,6 +152,10 @@ public class LocalDoorPath extends Path{
 		return this;
 	}
 	
+	public boolean isReachable() {
+		return reachable;
+	}
+	
 	private void calculatePath(ClientContext ctx, boolean openDoors) {
 		Tile base = ctx.game.mapOffset();
 		Tile myPos = ctx.players.local().tile();
@@ -161,6 +166,7 @@ public class LocalDoorPath extends Path{
 		
 		List<Node> path = graph.path(new Point(myPos.x(), myPos.y()), new Point(destination.x(), destination.y()));
 		if (path != null) {
+			reachable = true;
 			List<Tile> segmentList = new ArrayList<>();
 				
 			for (Node n : path) {
@@ -179,6 +185,8 @@ public class LocalDoorPath extends Path{
 			Tile[] segments = new Tile[segmentList.size()];
 			segments = segmentList.toArray(segments);
 			pathSegments.add(segments);
+		} else {
+			reachable = false;
 		}
 	}
 	

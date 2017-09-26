@@ -64,7 +64,6 @@ public class Graph {
 		if (target.x < 0 || target.y < 0)
 			return null;
 		
-		
 		Node targetNode = nodes[target.x][target.y];
 		
 		Node curr = nodes[source.x][source.y].copy();

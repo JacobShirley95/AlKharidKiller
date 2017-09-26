@@ -54,7 +54,7 @@ import org.powerbot.script.rt6.Menu;
 
 @Script.Manifest(name = "CombatScript", description = "Kills any pre-defined warrior and opens doors/gates", properties = "client=4; topic=0;")
 public class CombatScript extends PollingScript<ClientContext> implements PaintListener{
-	private static final boolean SHOULD_LOOT = true;
+	private static final boolean SHOULD_LOOT = false;
 	private static final boolean PICK_UP_ARROW_CLUMPS = false;
 	
 	private static final boolean TELE_AWAY = true;
@@ -70,7 +70,9 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 	private static final int STATS_MAGIC_ID = 6;
 	private static final int STATS_HP_ID = 9;
 	
-	private static final int TRAINING_MODE = STATS_DEFENCE_ID;
+	private static final int TRAINING_MODE = STATS_STRENGTH_ID;
+	
+	private static final int REPOSITION_TIMEOUT = 20000;
 
 	//new int[] {7323}, new int[][] {new int[] {-28, 28, -168, 0, -36, 36}}, 
 	enum CombatZone {
@@ -85,7 +87,11 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 		
 		GIANT_SPIDERS(new Area(new Tile(2122, 5269), new Tile(2127, 5273)), new DoorType[] {}, false),
 		
-		MOSS_GIANTS(new Area(new Tile(3158, 9899), new Tile(3170, 9910)), new DoorType[] {}, true);
+		MOSS_GIANTS(new Area(new Tile(3158, 9899), new Tile(3170, 9910)), new DoorType[] {}, true),
+		
+		FLESH_CRAWLERS(new Area(new Tile(2028, 5185), new Tile(2048, 5193)), new DoorType[] {}, false),
+		
+		SOS_30_ZOMBIES(new Area(new Tile(2028, 5231), new Tile(2040, 5245)), new DoorType[] {}, false);
 		
 		public Area area;
 		public DoorType[] doors;
@@ -101,8 +107,10 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 	enum NpcType {
 		CHICKEN(new int[] {2692, 2693}, new int[] {-20, 20, -68, 0, -20, 20}),
 		WARRIOR(new int[] {3103}, new int[] {-28, 28, -168, 0, -36, 36}),
+		ZOMBIE(new int[] {2501, 2502, 2503}, new int[] {-28, 28, -168, 0, -36, 36}),
 		GIANT_SPIDER(new int[] {2477}, new int[] {-20, 20, -68, 0, -20, 20}),
-		MOSS_GIANT(new int[] {2090, 2091, 2092, 2093}, new int[] {-28, 28, -168, 0, -36, 36});
+		MOSS_GIANT(new int[] {2090, 2091, 2092, 2093}, new int[] {-28, 28, -168, 0, -36, 36}),
+		FLESH_CRAWLER(new int[] {2499, 2498}, new int[] {-30, 30, -80, 0, -30, 30});
 		
 		public int[] ids;
 		public int[] bounds;
@@ -126,7 +134,7 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 					 false,
 					 null),
 		
-		GIANT_SPIDERS(CombatZone.GIANT_SPIDERS, 
+		SOS_GIANT_SPIDERS(CombatZone.GIANT_SPIDERS, 
 					  new NpcType[] {NpcType.GIANT_SPIDER},
 					  new int[] {},
 					  false,
@@ -134,7 +142,19 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 		
 		MOSS_GIANTS(CombatZone.MOSS_GIANTS,
 				  new NpcType[] {NpcType.MOSS_GIANT},
-				  new int[] {594, 562, 561, 563},
+				  new int[] {594, 562, 561, 563, 564},
+				  false,
+				  null),
+		
+		SOS_FLESH_CRAWLERS(CombatZone.FLESH_CRAWLERS,
+				  new NpcType[] {NpcType.FLESH_CRAWLER},
+				  new int[] {594, 562, 561, 563, 564},
+				  false,
+				  null),
+		
+		SOS_30_ZOMBIES(CombatZone.SOS_30_ZOMBIES,
+				  new NpcType[] {NpcType.ZOMBIE, NpcType.FLESH_CRAWLER},
+				  new int[] {886},
 				  false,
 				  null);
 		
@@ -153,10 +173,11 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 		}
 	}
 	
-	ScriptArea SCR = ScriptArea.AL_KHARID;
+	ScriptArea SCR = ScriptArea.SOS_30_ZOMBIES;
 	CombatZone zone = SCR.zone;
 	NpcType[] npcs = SCR.npcs;
 	int[] lootValues = new int[SCR.lootIds.length];
+	long lastReposition = 0;
 	
 	private int pickedUpValue = 0;
 	
@@ -271,15 +292,14 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 	
 	private void walkPath(LocalDoorPath path, int distanceToNextClick, boolean hunt) {
 		while (!ctx.controller.isStopping() && path.traverse()) {
-			Condition.wait(new Callable<Boolean>() {
-				@Override
-				public Boolean call() throws Exception {
-					if (hunt && attemptAttack(getEnemies(true)))
-						return true;
-					
-					return ctx.movement.distance(ctx.movement.destination()) < distanceToNextClick;
+			long timeout = System.currentTimeMillis() + 60000;
+			while (System.currentTimeMillis() < timeout &&
+				   ctx.movement.distance(ctx.movement.destination()) > distanceToNextClick) {
+				if (hunt && attemptAttack(getEnemies(true))) {
+					System.out.println("attacking while moving");
+					return;
 				}
-			}, 300, 200);
+			}
 		}
 	}
 	
@@ -343,41 +363,32 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 			}
 		});
 		
-		if (enemies.size() > 1) {
-			Map<Npc, Integer> distances = new HashMap<>();
-			
-			enemies.forEach(new Consumer<Npc>() {
-				@Override
-				public void accept(Npc npc) {
-					distances.put(npc, new LocalDoorPath(ctx, npc.tile(), zone.doors, true).calculatePath().getLength());
+		Map<Npc, Integer> distances = new HashMap<>();
+		
+		enemies.select(new Filter<Npc>() {
+			@Override
+			public boolean accept(Npc npc) {
+				LocalDoorPath path = new LocalDoorPath(ctx, npc.tile(), zone.doors, true).calculatePath();
+				if (path.isReachable()) {
+					System.out.println("reachable: "+npc.name());
+					distances.put(npc, path.getLength());
+					
+					return true;
 				}
-			});
+				return false;
+			}
+		});
 
-			enemies.sort(new Comparator<Npc>() {
-				@Override
-				public int compare(Npc n1, Npc n2) {
-					return distances.get(n1) - distances.get(n2);
-				}
-			});
-		}
+		enemies.sort(new Comparator<Npc>() {
+			@Override
+			public int compare(Npc n1, Npc n2) {
+				return distances.get(n1) - distances.get(n2);
+			}
+		});
 		
 		if (randomise && Math.random() > 0.9) {
 			enemies.shuffle();
 		}
-		
-		Player myPlayer = ctx.players.local();
-		
-		enemies.sort(new Comparator<Npc>() {
-			@Override
-			public int compare(Npc npc1, Npc npc2) {
-				int i1 = npc1.interacting().equals(myPlayer) ? 1 : 0;
-				int i2 = npc2.interacting().equals(myPlayer) ? 1 : 0;
-				if (i1 > i2)
-					System.out.println(i1);
-				return i2 - i1;
-			}
-			
-		});
 		
 		/*
 		
@@ -417,11 +428,24 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 		return null;
 	}
 	
-	private BasicQuery<Npc> filterNpcs(NpcType[] npcs) {
+	private BasicQuery<Npc> filterNpcs(final NpcType[] npcs) {
 		BasicQuery<Npc> q = ctx.npcs.select();
-		for (NpcType npc : npcs) {
-			q.id(npc.ids);
-		}
+		q.select(new Filter<Npc>() {
+
+			@Override
+			public boolean accept(Npc npc) {
+				for (NpcType npc2 : npcs) {
+					for (int id : npc2.ids) {
+						if (id == npc.id()) {
+							return true;
+						}
+					}
+				}
+				
+				return false;
+			}
+			
+		});
 		
 		return q;
 	}
@@ -433,9 +457,10 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 	private boolean attemptAttack(BasicQuery<Npc> enemies) {
 		Npc target = hovering;
 		Player myPlayer = ctx.players.local();
-
-		if (!attackable(target) || (!isMultiCombat(target) && enemies.peek().interacting().equals(myPlayer))) {
-			target = getBestTarget(enemies);
+		
+		Npc best = getBestTarget(enemies);
+		if (!attackable(target) || (!isMultiCombat(target) && best.interacting().equals(myPlayer))) {
+			target = best;
 		}
 		
 		final Npc first = target;
@@ -481,7 +506,7 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 	
 	private boolean attack() {
 		BasicQuery<Npc> enemies = getEnemies(true);
-		if (enemies.isEmpty()) {
+		if (enemies.isEmpty() && System.currentTimeMillis() > lastReposition + REPOSITION_TIMEOUT) {
 			System.out.println("no warriors about, clicking on mm");
 			enemies = filterNpcs(npcs).select(new Filter<Npc>() {
 				@Override
@@ -493,6 +518,8 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 				}
 				
 			}).shuffle();
+			
+			lastReposition = System.currentTimeMillis();
 			
 			Tile t = null;
 			if (!enemies.isEmpty())
@@ -528,6 +555,51 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 	private Npc getBestTarget(BasicQuery<Npc> npcs) {
 		Iterator<Npc> npcsI = npcs.iterator();
 		Player local = ctx.players.local();
+		
+		Npc target = null;
+		
+		if (isMultiCombat(null)) {
+			while (npcsI.hasNext()) {
+				Npc npc = npcsI.next();
+				if (npc.interacting().equals(local)) {
+					if (target != null) {
+						if (npc.healthPercent() < target.healthPercent())
+							target = npc;
+					} else
+						target = npc;
+				}
+			}
+		} else {
+			System.out.println("Looking for better");
+			List<Npc> potentialAttackers = new ArrayList<>();
+			while (npcsI.hasNext()) {
+				Npc npc = npcsI.next();
+				if (npc.interacting().equals(local)) {
+					potentialAttackers.add(npc);
+				}
+			}
+			
+			if (!potentialAttackers.isEmpty()) {
+				System.out.println("DSFS");
+				long timeout = System.currentTimeMillis() + 3000;
+				while (System.currentTimeMillis() < timeout) {
+					for (Npc npc : potentialAttackers) {
+						if (npc.interacting().equals(local) && npc.animation() != -1) {
+							target = npc;
+							break;
+						}
+					}
+					if (target != null)
+						break;
+				}
+			}
+		}
+		
+		if (target != null)
+			return target;
+		
+		npcsI = npcs.iterator();
+		
 		while (npcsI.hasNext()) {
 			Npc npc = npcsI.next();
 			if (!npc.interacting().valid() || npc.interacting().equals(local))
@@ -690,42 +762,55 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 			walkToCombat();
 		}
 	}
+	
+	private boolean pickupable(int id) {
+		if (ctx.inventory.select().count() == 28) {
+			Item i = ctx.inventory.select().id(id).peek();
+			if (i != null && i.valid()) {
+				return i.stackable();
+			} else
+				return false;
+		}
+		return true;
+	}
 
 	private boolean loot() {
-		if (ctx.inventory.select().count() == 28)
-			return false;
-		
 		BasicQuery<GroundItem> items = ctx.groundItems.select().id(SCR.lootIds).nearest().viewable();
 		
 		if (Math.random() > 0.8)
 			items.shuffle();
 		
-		if (items.size() > 0) {
-			GroundItem item = items.peek();
-
-			handlePathToEntity(item.tile(), item);
-
-			for (int tries = 0; tries < 3; tries++) {
-				if (item.valid() && item.tile().matrix(ctx).reachable()) {
-					int id = item.id();
-					if (item.interact("Take", item.name())) {
-						ctx.game.tab(Tab.INVENTORY);
-						if (Condition.wait(new Callable<Boolean>() {
-							@Override
-							public Boolean call() throws Exception {
-								return !item.valid();
-							}
-						}, 300)) {
-							System.out.println("Picked up: " + item.name());
-							int[] ids = SCR.lootIds;
-							for (int i = 0; i < ids.length; i++) {
-								if (id == ids[i]) {
-									pickedUpValue += lootValues[i] * item.stackSize();
-									break;
+		Iterator<GroundItem> it = items.iterator();
+		while (it.hasNext()) {
+			GroundItem item = it.next();
+			
+			if (pickupable(item.id())) {
+				handlePathToEntity(item.tile(), item);
+	
+				for (int tries = 0; tries < 3; tries++) {
+					if (item.valid() && item.tile().matrix(ctx).reachable()) {
+						int id = item.id();
+						String name = item.name();
+						int stack = item.stackSize();
+						if (item.interact("Take", item.name())) {
+							ctx.game.tab(Tab.INVENTORY);
+							if (Condition.wait(new Callable<Boolean>() {
+								@Override
+								public Boolean call() throws Exception {
+									return !item.valid();
 								}
+							}, 300)) {
+								System.out.println("Picked up: " + name);
+								int[] ids = SCR.lootIds;
+								for (int i = 0; i < ids.length; i++) {
+									if (id == ids[i]) {
+										pickedUpValue += lootValues[i] * stack;
+										break;
+									}
+								}
+								Condition.sleep(500);
+								return true;
 							}
-							Condition.sleep(500);
-							return true;
 						}
 					}
 				}
@@ -810,6 +895,9 @@ public class CombatScript extends PollingScript<ClientContext> implements PaintL
 					break;
 				}
 			}
+			
+			if (b)
+				lastReposition = -1;
 			
 			return b;
 		}
